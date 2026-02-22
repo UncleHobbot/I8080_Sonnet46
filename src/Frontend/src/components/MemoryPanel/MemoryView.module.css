@@ -1,0 +1,112 @@
+.panel {
+  padding: 8px;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.title {
+  color: #888;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.addrForm {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.prefix { color: #555; }
+
+.addrInput {
+  width: 50px;
+  background: #111;
+  border: 1px solid #333;
+  color: #00ff00;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+.goBtn {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #888;
+  font-size: 10px;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.goBtn:hover { background: #2a2a2a; }
+
+.hexGrid { width: 100%; }
+
+.gridRow {
+  display: flex;
+  gap: 2px;
+}
+
+.gridHeader {
+  color: #444;
+  border-bottom: 1px solid #222;
+  margin-bottom: 2px;
+  padding-bottom: 2px;
+}
+
+.addrCol {
+  color: #555;
+  width: 38px;
+  flex-shrink: 0;
+}
+
+.hexCell {
+  color: #00cc00;
+  width: 19px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.watched {
+  background: #002200;
+  color: #00ff00;
+  border-radius: 2px;
+}
+
+.asciiCol {
+  color: #445544;
+  margin-left: 4px;
+  letter-spacing: 0;
+}
+
+.navRow {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  border-top: 1px solid #222;
+  padding-top: 4px;
+}
+
+.navBtn {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #888;
+  font-size: 10px;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-family: inherit;
+}
+.navBtn:hover { background: #2a2a2a; }

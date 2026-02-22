@@ -1,0 +1,28 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Node.js
+node_modules/
+src/Frontend/dist/
+
+# Built output (wwwroot comes from Vite build)
+src/Server/wwwroot/
+
+# Generated disk images (large binaries, regenerate with MkDisk)
+disks/*.dsk
+
+# ROMs (obtain separately - not redistributable)
+roms/*.sys
+roms/*.COM
+roms/*.com
+
+# Claude Code session data
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

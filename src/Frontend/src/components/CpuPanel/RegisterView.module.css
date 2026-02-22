@@ -1,0 +1,82 @@
+.panel {
+  padding: 8px;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.title {
+  color: #888;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.regs {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.regs td {
+  padding: 2px 4px;
+}
+
+.lbl {
+  color: #888;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.val {
+  color: #00ff00;
+  font-weight: bold;
+  min-width: 50px;
+}
+
+.disasm {
+  color: #666;
+  font-size: 11px;
+  font-weight: normal;
+}
+
+.flagOn {
+  color: #00ff00;
+  background: #002200;
+  padding: 1px 3px;
+  border-radius: 2px;
+  margin-right: 2px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.flagOff {
+  color: #333;
+  padding: 1px 3px;
+  border-radius: 2px;
+  margin-right: 2px;
+  font-size: 10px;
+}
+
+.cycles {
+  color: #555;
+  font-size: 11px;
+  margin-top: 4px;
+  border-top: 1px solid #222;
+  padding-top: 4px;
+}
+
+.halted {
+  color: #ff4444;
+}
+
+.iff {
+  color: #4444ff;
+}
+
+.dim {
+  color: #444;
+  font-size: 12px;
+}

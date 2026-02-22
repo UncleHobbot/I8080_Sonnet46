@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Emulator/Emulator.csproj" />
+    <Project Path="src/Server/Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Emulator.Tests/Emulator.Tests.csproj" />
+    <Project Path="tests/Integration.Tests/Integration.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/MkDisk/MkDisk.csproj" />
+  </Folder>
+</Solution>
