@@ -126,7 +126,9 @@ public sealed class BiosHandler
         // Reload CCP+BDOS from stored binary, then restart CCP
         _mem.Load(MemoryMap.CCP_BASE, _cpmBinary);
         InitZeroPage(cpu);
-        cpu.PC = MemoryMap.CCP_BASE;
+        // Warm boot enters CCP at +3 (past the cold-boot init vector at CCP_BASE+0).
+        // The cpm22.sys header is: JMP cold (0xE400) / JMP warm (0xE403).
+        cpu.PC = MemoryMap.CCP_BASE + 3;
         cpu.SP = MemoryMap.BIOS_BASE;
         _input.Clear();
     }
