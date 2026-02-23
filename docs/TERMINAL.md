@@ -1,6 +1,6 @@
 # CP/M 2.2 Terminal Guide
 
-This emulator runs real CP/M 2.2 machine code on an emulated Intel 8080A processor. The terminal in the browser is a full VT100-compatible xterm connected via WebSocket — everything you type goes directly to the CP/M Console Command Processor (CCP).
+This emulator runs a complete Intel 8080 personal computer with CP/M 2.2 entirely in .NET — no external ROMs or binaries required. The terminal in the browser is a full VT100-compatible xterm connected via WebSocket.
 
 ---
 
@@ -10,40 +10,45 @@ This emulator runs real CP/M 2.2 machine code on an emulated Intel 8080A process
 A>
 ```
 
-`A` is the current drive. `>` means CP/M is ready for input. You're in the **Transient Program Area** — type a command and press **Enter**.
+`A` is the current drive. `>` means CP/M is ready for input. Type a command and press **Enter**.
 
 ---
 
 ## Built-in CCP Commands
 
-These are built into CP/M itself and require no file on disk.
+These commands are built into the CP/M Console Command Processor and require no file on disk.
 
 ### DIR — List files
 
 ```
 A>DIR
 A>DIR *.COM
+A>DIR *.ASM
 A>DIR B:
 ```
 
-Lists files on the current (or specified) drive. Wildcards `*` (any chars) and `?` (single char) are supported.
+Lists files on the current (or specified) drive. Wildcards:
+- `*` — matches any sequence of characters
+- `?` — matches any single character
 
 ### TYPE — Display a file
 
 ```
 A>TYPE README.TXT
+A>TYPE HELLO.ASM
 ```
 
-Prints the contents of a text file to the terminal. Binary files will produce garbage output.
+Prints the contents of a text file to the terminal. Lines ending with `Ctrl+Z` (0x1A) mark the CP/M end-of-file.
 
-### ERA — Erase files
+### ERA / DEL — Erase files
 
 ```
 A>ERA TEMP.TXT
 A>ERA *.BAK
+A>DEL *.TMP
 ```
 
-Wildcards work. CP/M will ask `ALL (Y/N)?` if you erase more than one file.
+Wildcards are supported. If the pattern matches multiple files, CP/M asks `Delete all? (Y/N)`.
 
 ### REN — Rename a file
 
@@ -51,7 +56,7 @@ Wildcards work. CP/M will ask `ALL (Y/N)?` if you erase more than one file.
 A>REN NEWNAME.TXT=OLDNAME.TXT
 ```
 
-Note the order: **new name = old name**.
+**Order: new name = old name.** Both files must be on the same drive.
 
 ### SAVE — Save memory to file
 
@@ -59,248 +64,79 @@ Note the order: **new name = old name**.
 A>SAVE 4 OUTPUT.COM
 ```
 
-Saves *n* 256-byte pages from the TPA (starting at 0x0100) to a file. Rarely used interactively.
+Saves *n* 256-byte pages of memory starting at address 0x0100 (the TPA) to a file. Useful for capturing assembled output or memory snapshots.
 
 ### USER — Change user area
 
 ```
 A>USER 3
+A>USER 0
 ```
 
 CP/M supports 16 user areas (0–15) per drive. Files in different user areas are hidden from each other. Default is user 0.
 
----
-
-## Running Programs
-
-Type the program name (without `.COM`) and press Enter.
+### CLS — Clear screen
 
 ```
-A>MBASIC
-A>ASM HELLO
-A>ED HELLO.ASM
+A>CLS
 ```
 
-CP/M searches drive A (user 0) for a matching `.COM` file, loads it at 0x0100, and jumps to it.
-
----
-
-## Available Programs
-
-### MBASIC — Microsoft BASIC 5.21
+### VER — Version
 
 ```
-A>MBASIC
+A>VER
+CP/M 2.2 (.NET)
 ```
 
-Full Microsoft BASIC interpreter with file I/O, string functions, and floating-point math.
+### HELP — Show available commands
 
-**Key commands inside MBASIC:**
-
-| Command | Description |
-|---------|-------------|
-| `10 PRINT "HELLO"` | Enter a program line |
-| `RUN` | Execute the program |
-| `LIST` | List the program |
-| `LIST 10-50` | List lines 10 through 50 |
-| `NEW` | Clear program |
-| `SAVE "PROG.BAS"` | Save to disk |
-| `LOAD "PROG.BAS"` | Load from disk |
-| `SYSTEM` | Exit back to CP/M |
-
-**Quick example:**
-
-```basic
-10 FOR I = 1 TO 10
-20   PRINT I, I*I
-30 NEXT I
-40 END
-RUN
 ```
+A>HELP
+```
+
+Lists all built-in commands and built-in programs.
 
 ---
 
-### ED — CP/M Line Editor
+## Built-in Programs
+
+These programs are implemented in .NET and are always available — no `.COM` files needed on disk.
+
+### EDIT — Screen text editor
 
 ```
-A>ED HELLO.ASM
+A>EDIT HELLO.ASM
+A>EDIT NOTES.TXT
+A>EDIT
 ```
 
-ED is a line-oriented editor — you work with lines, not a full-screen cursor. A new file starts empty. An existing file is loaded for editing.
+Full-screen VT100 editor with arrow-key navigation, find/replace, and direct disk save.
+See [EDITOR.md](EDITOR.md) for complete documentation.
 
-**ED prompt is `*`.**
-
-| Command | Description |
-|---------|-------------|
-| `I` | Insert mode — type text, one line per Enter; end with **Ctrl+Z** |
-| `#T` | Type (display) all lines |
-| `1T` | Display line 1 |
-| `T` | Display current line |
-| `N` | Advance to next line |
-| `#N` | Go to last line |
-| `1,5T` | Display lines 1–5 |
-| `S/old/new/` | Substitute first occurrence on current line |
-| `NS/old/new/` | Substitute on all remaining lines |
-| `D` | Delete current line |
-| `1,5D` | Delete lines 1–5 |
-| `E` | Save and exit |
-| `Q` | Quit without saving (asks confirmation) |
-| `H` | Rewind to start of file (re-opens for editing) |
-
-**Creating a new file:**
-
-```
-A>ED HELLO.ASM
-NEW FILE
-*I
-        ORG     0100H
-START:  MVI     A,'H'
-        CALL    PUTCH
-        HLT
-        END     START
-^Z
-*E
-```
-
----
-
-### ASM — Intel 8080 Assembler
+### ASM — Intel 8080 assembler
 
 ```
 A>ASM HELLO
 ```
 
-Assembles `HELLO.ASM` → produces `HELLO.COM` (and `HELLO.PRN` listing). The source file must have a `.ASM` extension; omit it on the command line.
+Two-pass assembler: reads `HELLO.ASM`, writes `HELLO.COM`.
+See [ASSEMBLER.md](ASSEMBLER.md) for complete documentation.
 
-**Basic 8080 assembly syntax:**
-
-```asm
-        ORG     0100H           ; Programs start at 0x0100 in CP/M
-
-BDOS    EQU     0005H           ; BDOS entry point
-CONOUT  EQU     2               ; BDOS function: output char in E
-
-        MVI     C, CONOUT       ; Function number
-        MVI     E, 'A'          ; Character to print
-        CALL    BDOS            ; Call BDOS
-        RET                     ; Return to CP/M
-
-        END
-```
-
-After assembly, run with:
+### BASIC — BASIC interpreter
 
 ```
-A>HELLO
+A>BASIC
+A>BASIC GAME.BAS
 ```
 
-**BDOS functions** (call via `CALL 0005H` with function number in `C`):
-
-| C | Function | Input | Output |
-|---|----------|-------|--------|
-| 0 | System Reset | — | — |
-| 1 | Console Input | — | A = char |
-| 2 | Console Output | E = char | — |
-| 9 | Print String | DE = addr of `$`-terminated string | — |
-| 10 | Read Console Buffer | DE = buffer | — |
-| 11 | Console Status | — | A = 0/1 |
-| 13 | Reset Disk | — | — |
-| 14 | Select Disk | E = drive (0=A) | — |
-| 15 | Open File | DE = FCB | A = 0 ok / 255 fail |
-| 16 | Close File | DE = FCB | — |
-| 17 | Search First | DE = FCB | A = 0 found / 255 not |
-| 18 | Search Next | — | A = 0 found / 255 not |
-| 19 | Delete File | DE = FCB | — |
-| 20 | Sequential Read | DE = FCB | A = 0 ok |
-| 21 | Sequential Write | DE = FCB | A = 0 ok |
-| 22 | Make File | DE = FCB | A = 0 ok / 255 fail |
-| 25 | Return Current Disk | — | A = drive (0=A) |
-| 26 | Set DMA Address | DE = addr | — |
-
----
-
-### PIP — Peripheral Interchange Program
-
-Copy files between drives, devices, and files.
-
-```
-A>PIP B:=A:*.COM        ; Copy all .COM files to drive B
-A>PIP A:NEW.TXT=OLD.TXT ; Rename via copy
-A>PIP CON:=FILE.TXT     ; Print file to terminal
-A>PIP FILE.TXT=CON:     ; Capture terminal input to file (end with ^Z)
-```
-
----
-
-### STAT — Disk and File Statistics
-
-```
-A>STAT               ; Show disk space on current drive
-A>STAT *.*           ; Show file sizes
-A>STAT DSK:          ; Show disk parameters
-```
-
----
-
-### DDT — Dynamic Debugging Tool
-
-Low-level debugger for 8080 code.
-
-```
-A>DDT HELLO.COM
-```
-
-**DDT commands:**
-
-| Command | Description |
-|---------|-------------|
-| `D` | Display memory (hex + ASCII dump) |
-| `D 0100` | Dump from address 0100h |
-| `L` | List (disassemble) instructions |
-| `L 0100` | Disassemble from 0100h |
-| `G` | Go (run from current PC) |
-| `G 0100` | Run from address 0100h |
-| `T` | Trace one instruction |
-| `T 5` | Trace 5 instructions |
-| `S 0100` | Set/examine memory at 0100h |
-| `X` | Examine/modify registers |
-| `^C` | Exit DDT back to CP/M |
-
----
-
-### DUMP — Hex dump a file
-
-```
-A>DUMP FILE.COM
-```
-
-Displays the raw bytes of a file in hex + ASCII, 16 bytes per line.
-
----
-
-## Special Keys
-
-| Key | Effect |
-|-----|--------|
-| **Enter** | Send command / end input line |
-| **Ctrl+C** | Abort current program, return to CP/M |
-| **Ctrl+Z** | End-of-file marker (exit insert mode in ED, end PIP input) |
-| **Ctrl+S** | Pause output (scroll stop) |
-| **Ctrl+Q** | Resume output |
-| **Ctrl+P** | Toggle printer echo (no real printer, but captured in terminal) |
-| **Backspace / Del** | Erase last character |
-| **Ctrl+U** | Cancel current input line |
-| **Ctrl+R** | Retype current line (after edits) |
-| **Ctrl+X** | Erase entire input line |
-| **Ctrl+E** | Physical end of line (within long input) |
+Line-numbered BASIC with full arithmetic, string handling, file I/O, and FOR/NEXT loops.
+See [BASIC.md](BASIC.md) for complete documentation.
 
 ---
 
 ## Drives
 
-CP/M supports drives A through D. Drive A is mounted by default with the system disk.
-
-Switch drives by typing the drive letter followed by a colon:
+CP/M supports drives A through D. Switch by typing the drive letter and colon:
 
 ```
 A>B:
@@ -308,61 +144,112 @@ B>A:
 A>
 ```
 
-The debug panel on the right shows mounted disk images and allows uploading/downloading `.dsk` files.
+Drive A is automatically mounted at startup. Additional drives can be mounted via the **Disk panel** in the debug sidebar (upload a `.dsk` file).
+
+---
+
+## Running .COM Programs
+
+If a `.COM` file exists on the current drive (or drive A), type its name without the extension:
+
+```
+A>HELLO
+```
+
+CP/M loads the file at address 0x0100 and runs it. Press **Ctrl+C** to abort a running program and return to the prompt.
+
+---
+
+## Special Keys
+
+| Key | Effect |
+|-----|--------|
+| **Enter** | Send command |
+| **Backspace** | Delete last character |
+| **Ctrl+C** | Abort current program / cancel input line |
+| **Ctrl+U** | Cancel (erase) current input line |
+| **Ctrl+Z** | End-of-file (exits insert mode in editors, terminates PIP input) |
+| **Ctrl+S** | Pause output |
+| **Ctrl+Q** | Resume output |
 
 ---
 
 ## Hello World Walkthrough
 
-A complete example: write, assemble, and run a "Hello, World!" program.
+A complete example: write, assemble, and run a program from scratch.
 
-**1. Create the source file:**
+**1. Create the source:**
 
 ```
-A>ED HELLO.ASM
-NEW FILE
-*I
+A>EDIT HELLO.ASM
+```
+
+Type:
+
+```
 BDOS    EQU     0005H
-CONOUT  EQU     2
+PRTSTR  EQU     9
 
         ORG     0100H
-START:  MVI     C, CONOUT
-        MVI     E, 'H'
-        CALL    BDOS
-        MVI     E, 'I'
-        CALL    BDOS
-        MVI     E, 0DH
+
+START:  MVI     C, PRTSTR
+        LXI     D, MSG
         CALL    BDOS
         RET
+
+MSG:    DB      'Hello, World!', 0DH, 0AH, '$'
         END     START
-^Z
-*E
 ```
+
+Press **Ctrl+S** to save, **Ctrl+Q** to quit.
 
 **2. Assemble:**
 
 ```
 A>ASM HELLO
+Assembling HELLO.ASM...
+HELLO.ASM: 0 error(s)
+Written HELLO.COM (17 bytes)
 ```
 
 **3. Run:**
 
 ```
 A>HELLO
-HI
+Hello, World!
 A>
 ```
 
 ---
 
-## Memory Map Reference
+## Memory Map
 
 ```
-0x0000–0x00FF   Zero page (JMP WBOOT at 0x0000, JMP BDOS at 0x0005)
-0x0100–0xCFFF   TPA — your programs load and run here
-0xE400–0xEBFF   CCP (Console Command Processor)
-0xEC00–0xF9FF   BDOS (Basic Disk Operating System)
-0xFA00–0xFFFF   BIOS (I/O driver, jump table)
+0x0000–0x00FF   Zero page
+                  0x0000: JMP WBOOT
+                  0x0004: current drive number
+                  0x0005: BDOS entry (OUT 17 trap)
+0x0100–0xCFFF   TPA — programs load and run here
+0xE400–0xEBFF   CCP area (managed by .NET CcpHandler)
+0xEC00–0xF9FF   BDOS area (managed by .NET BdosHandler)
+0xFA00–0xFA32   BIOS jump table (17 × JMP)
+0xFA33–0xFA82   BIOS stubs (17 × OUT fn + RET)
+0xFB00+         DPH/DPB disk parameter blocks
 ```
 
-The **Memory panel** in the debug sidebar lets you inspect any address range in real time. The **Registers panel** shows A, BC, DE, HL, SP, PC, and all flags live while the CPU runs.
+The **Memory panel** in the debug sidebar lets you inspect any address range in real time.
+
+---
+
+## Disk Format
+
+Standard 8-inch single-density CP/M 2.2:
+
+```
+77 tracks × 26 sectors × 128 bytes/sector = 256,256 bytes
+Block size: 1 KB (8 sectors)
+Directory: 64 entries (2 blocks)
+System tracks: 2 (reserved)
+```
+
+`.dsk` files can be uploaded and downloaded via the **Disk panel**.

@@ -8,7 +8,10 @@ public static class MemoryMap
     public const int WBOOT_VECTOR   = 0x0000;  // JMP WBOOT
     public const int IOBYTE_ADDR    = 0x0003;
     public const int DRIVE_ADDR     = 0x0004;
-    public const int BDOS_VECTOR    = 0x0005;  // JMP BDOS entry
+    public const int BDOS_VECTOR    = 0x0005;  // OUT BDOS_PORT + RET stub
+
+    // I/O port assignments
+    public const int BDOS_PORT      = 17;      // port number for .NET BDOS trap
 
     // TPA - Transient Program Area
     public const int TPA_BASE       = 0x0100;

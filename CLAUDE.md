@@ -17,7 +17,7 @@ dotnet test tests/Integration.Tests/                           # 2 headless CP/M
 dotnet test tests/Emulator.Tests/ --filter "DisplayName~DAA"   # run a single test by name
 ```
 
-Integration tests require `roms/cpm22.sys` and `disks/cpm22_system.dsk` to exist. They use `Xunit.SkippableFact` (`Skip.If`) so they skip gracefully when those files are absent. The running server process locks `Emulator.dll` — stop it before rebuilding.
+Integration tests boot the pure-.NET CP/M and require no external ROM files. They run on a blank disk and pass without any `roms/` or `disks/` files. The running server process locks `Emulator.dll` — stop it before rebuilding.
 
 ### Run
 ```bash
@@ -35,19 +35,13 @@ dotnet run --project tools/MkDisk -- "$(pwd)/roms" "$(pwd)/disks"
 
 This creates `disks/cpm22_system.dsk` (256,256 bytes). Both `roms/*.sys`, `roms/*.COM`, and `disks/*.dsk` are git-ignored.
 
-### Obtain CP/M binary
-Concatenate CCP + BDOS from the `ivop/cpm22-from-source` GitHub release:
-```bash
-cat bin/ccp.sys bin/bdos.sys > roms/cpm22.sys   # result: 5632 bytes
-```
-
 ---
 
 ## Architecture
 
 ### How CP/M execution works
 
-The emulator runs the **real CP/M 2.2 binary** (`cpm22.sys`, 5632 bytes = CCP 2KB + BDOS 3.5KB) as actual 8080 machine code. The .NET code implements only the BIOS layer.
+The entire CP/M stack is implemented in .NET — no external ROM or binary files required. The CPU, BIOS (ports 0–16), BDOS (port 17), CCP, text editor, assembler, and BASIC interpreter are all .NET code.
 
 **BIOS trap mechanism** — `CpmSystem.Initialize()` writes into memory:
 - **Jump table** at `0xFA00`: 17 × 3-byte `JMP stubN` entries
@@ -57,18 +51,21 @@ When CP/M calls a BIOS entry (e.g. CONOUT via `CALL 0xFA0C`), the JMP fires the 
 
 ### CP/M memory layout (64KB)
 ```
-0x0000–0x00FF   Zero page: JMP WBOOT @0x0000, JMP BDOS @0x0005, CDISK @0x0004
+0x0000–0x00FF   Zero page: JMP WBOOT @0x0000, BDOS trap @0x0005, CDISK @0x0004
 0x0100–0xCFFF   TPA — CP/M programs load and run here
-0xE400–0xEBFF   CCP  (loaded from cpm22.sys bytes 0x0000–0x07FF)
-0xEC00–0xF9FF   BDOS (loaded from cpm22.sys bytes 0x0800+)
+0xE400–0xEBFF   CCP area (managed by .NET CcpHandler)
+0xEC00–0xF9FF   BDOS area (managed by .NET BdosHandler)
 0xFA00–0xFA32   BIOS jump table (17 × JMP)
 0xFA33–0xFA82   BIOS stubs (17 × OUT fn + RET)
 0xFB00+         DPH (×4 drives), DPB, DIRBUF, CSV, ALV
 ```
 All constants live in `MemoryMap.cs`.
 
-### WBOOT entry point
-Cold boot enters CCP at `CCP_BASE` (0xE400). Warm boot **must** enter at `CCP_BASE + 3` (0xE403) — the second JMP vector in the cpm22.sys header. Getting this wrong causes spurious `Bdos Err On X: Select` errors.
+### BDOS trap at 0x0005
+Instead of a JMP to a binary BDOS, address 0x0005 contains `OUT 17, A` + `RET` (`BDOS_PORT = 17`). When any code does `CALL 5`, `IoPort.Out()` intercepts port 17 and calls `BdosHandler.Execute(cpu)`.
+
+### CCP threading
+`BiosHandler.Boot()` and `WarmBoot()` call `CcpHandler.Run(cpu, ct)` which blocks the CPU thread on `TerminalInputQueue.BlockingRead()`. When the user runs a `.COM` file, CcpHandler sets `cpu.PC = 0x0100` and returns. The CPU executor resumes from there.
 
 ### Key data flows
 

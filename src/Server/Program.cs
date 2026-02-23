@@ -29,34 +29,26 @@ app.MapHub<EmulatorHub>("/hubs/emulator");
 // Health check
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
 
-// Auto-load CP/M binary and disk image on startup
+// Auto-start the emulator. Optionally load a disk image from disks/ directory.
 var emulator = app.Services.GetRequiredService<EmulatorService>();
-var logger = app.Services.GetRequiredService<ILogger<Program>>();
+var logger   = app.Services.GetRequiredService<ILogger<Program>>();
 
 var contentRoot = app.Environment.ContentRootPath;
-var romsDir = Path.GetFullPath(Path.Combine(contentRoot, "..", "..", "roms"));
-var disksDir = Path.GetFullPath(Path.Combine(contentRoot, "..", "..", "disks"));
+var disksDir    = Path.GetFullPath(Path.Combine(contentRoot, "..", "..", "disks"));
+var diskAPath   = Path.Combine(disksDir, "cpm22_system.dsk");
 
-var cpmBinaryPath = Path.Combine(romsDir, "cpm22.sys");
-var diskAPath = Path.Combine(disksDir, "cpm22_system.dsk");
-
-if (File.Exists(cpmBinaryPath))
+byte[]? diskA = null;
+if (File.Exists(diskAPath))
 {
-    byte[] cpmBinary = File.ReadAllBytes(cpmBinaryPath);
-    byte[]? diskA = File.Exists(diskAPath) ? File.ReadAllBytes(diskAPath) : null;
-
-    logger.LogInformation("Loading CP/M binary: {path} ({size} bytes)", cpmBinaryPath, cpmBinary.Length);
-    if (diskA != null)
-        logger.LogInformation("Loading disk A: {path} ({size} bytes)", diskAPath, diskA.Length);
-    else
-        logger.LogWarning("No disk image at {path}. CP/M will boot but disk I/O will fail.", diskAPath);
-
-    emulator.LoadCpm(cpmBinary, diskA);
+    diskA = File.ReadAllBytes(diskAPath);
+    logger.LogInformation("Loading disk A: {path} ({size} bytes)", diskAPath, diskA.Length);
 }
 else
 {
-    logger.LogWarning("CP/M binary not found at {path}. Emulator will not start.", cpmBinaryPath);
-    logger.LogWarning("Place cpm22.sys in the roms/ directory and restart.");
+    logger.LogInformation("No disk image at {path}. Starting with empty disk A.", diskAPath);
 }
+
+// Start the pure-.NET CP/M emulator (no external binary required)
+emulator.StartEmulator(diskA);
 
 app.Run();

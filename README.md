@@ -1,75 +1,49 @@
 # Intel 8080 / CP/M 2.2 Emulator
 
-A browser-accessible emulator of an Intel 8080 personal computer running CP/M 2.2, with embedded text editor, assembler, and BASIC interpreter.
+A browser-accessible emulator of an Intel 8080 personal computer running CP/M 2.2. Everything — CPU, BIOS, BDOS, CCP, text editor, assembler, and BASIC interpreter — is implemented in .NET. **No external ROM binaries are required.**
+
+## Features
+
+- **Cycle-accurate Intel 8080A CPU** — all ~246 opcodes, correct flags, configurable speed (100 KHz – 10 MHz)
+- **Complete CP/M 2.2** — BIOS, BDOS, and CCP implemented in .NET; no external binary needed
+- **Built-in screen editor** (`EDIT`) — full-screen VT100 editor with arrow keys, find, goto
+- **Built-in assembler** (`ASM`) — two-pass Intel 8080 assembler; reads `.ASM`, writes `.COM`
+- **Built-in BASIC** (`BASIC`) — line-numbered BASIC with FOR/NEXT, GOSUB, file I/O, math functions
+- **Disk image support** — upload/download standard 8" CP/M `.dsk` files (256 KB each, up to 4 drives)
+- **Debug panel** — live register view, memory hex dump, step/pause/reset, speed control
 
 ## Architecture
 
-- **Backend**: .NET 10 (ASP.NET Core + SignalR)
-- **Frontend**: React + Vite + TypeScript + xterm.js
-- **CPU**: Cycle-accurate Intel 8080A emulation (all ~246 opcodes)
-- **OS**: Real CP/M 2.2 binary (CCP + BDOS run as actual 8080 code)
-- **BIOS**: Implemented in .NET via OUT-instruction trap mechanism
+| Layer | Implementation |
+|-------|---------------|
+| CPU | `src/Emulator/CPU/I8080.cs` — cycle-accurate, all opcodes |
+| BIOS | `src/Emulator/Bios/BiosHandler.cs` — OUT-instruction trap at ports 0–16 |
+| BDOS | `src/Emulator/Cpm/BdosHandler.cs` — OUT trap at port 17 (address 0x0005) |
+| CCP  | `src/Emulator/Cpm/CcpHandler.cs` — runs on CPU thread, blocks on terminal input |
+| Editor | `src/Emulator/Programs/TextEditor.cs` — ANSI/VT100 screen editor |
+| Assembler | `src/Emulator/Programs/Assembler8080.cs` — two-pass 8080 assembler |
+| BASIC | `src/Emulator/Programs/BasicInterpreter.cs` — full line-numbered interpreter |
+| Server | `src/Server/` — ASP.NET Core 10 + SignalR hub |
+| Frontend | `src/Frontend/` — React + Vite + TypeScript + xterm.js |
 
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Node.js 20+](https://nodejs.org/)
-- CP/M 2.2 binary (see below)
 
-## Obtaining CP/M 2.2
+No CP/M ROMs, no external `.COM` files, no additional downloads.
 
-CP/M 2.2 was released as open source by Caldera in 2001. The binary can be obtained from:
+## Quick Start
 
-1. **RunCPM project** - includes pre-built CP/M binaries:
-   ```
-   https://github.com/MockbaTheBorg/RunCPM
-   ```
-
-2. **Build from source** - The Digital Research source code is at:
-   ```
-   https://github.com/caldera-corp/CalderaCPM
-   ```
-
-3. **Alternative**: Download from the SIMH archive or retro-computing sites.
-
-Place the CCP+BDOS binary as `roms/cpm22.sys`. The file should be approximately 7.5KB.
-
-The binary layout expected:
-- Bytes 0x0000-0x07FF: CCP (Console Command Processor)
-- Bytes 0x0800+:       BDOS (Basic Disk Operating System)
-
-## Obtaining CP/M Programs
-
-Place `.COM` files in the `roms/` directory to include them on Drive A. Useful programs:
-
-| File | Description | Source |
-|------|-------------|--------|
-| `MBASIC.COM` | Microsoft BASIC 5.21 | RunCPM releases |
-| `ASM.COM` | Intel 8080 Assembler | DR sources |
-| `ED.COM` | CP/M Line Editor | DR sources |
-| `PIP.COM` | Peripheral Interchange Program | DR sources |
-| `STAT.COM` | Disk/File Statistics | DR sources |
-| `DDT.COM` | Dynamic Debugging Tool | DR sources |
-
-## Setup
-
-### 1. Build disk image
+### 1. Start the backend
 
 ```bash
-dotnet run --project tools/MkDisk
+dotnet run --project src/Server --urls "http://localhost:5000"
 ```
 
-This creates `disks/cpm22_system.dsk` with CP/M system tracks and any `.COM` files found in `roms/`.
+The server starts on `http://localhost:5000`. CP/M boots automatically.
 
-### 2. Start the backend
-
-```bash
-dotnet run --project src/Server
-```
-
-The server starts on `http://localhost:5000`.
-
-### 3. Start the frontend (development)
+### 2. Start the frontend (development)
 
 ```bash
 cd src/Frontend
@@ -77,103 +51,150 @@ npm install
 npm run dev
 ```
 
-Navigate to `http://localhost:5173`
+Navigate to `http://localhost:5173`. The `A>` prompt appears within a second.
 
-### 4. Production build
+### 3. Production build
 
 ```bash
 cd src/Frontend && npm run build  # outputs to src/Server/wwwroot
-dotnet run --project src/Server   # serves everything from :5000
+dotnet run --project src/Server   # serves everything at :5000
 ```
 
-## Terminal Usage
+## Using the Emulator
 
-Once running, the CP/M prompt (`A>`) appears in the terminal.
+Once booted, you'll see the CP/M prompt:
 
-**Basic CP/M commands:**
 ```
-A>DIR              - List files on current drive
-A>TYPE FILE.TXT    - Display a file
-A>MBASIC           - Start BASIC interpreter
-A>ASM PROG         - Assemble PROG.ASM → PROG.COM
-A>ED PROG.ASM      - Edit PROG.ASM with the line editor
-A>PIP B:=A:*.COM   - Copy all COM files to drive B
+A>
 ```
 
-**ED (Line Editor) commands:**
+### Basic commands
+
 ```
-*I          - Insert mode (type text, end with Ctrl-Z)
-*T          - Type (display) current line
-*N          - Next line
-*1T         - Type from line 1
-*#T         - Type all lines
-*E          - Exit and save
-*Q          - Quit without saving
+A>DIR               List files on current drive
+A>EDIT HELLO.ASM    Create/edit a text file
+A>ASM HELLO         Assemble HELLO.ASM → HELLO.COM
+A>HELLO             Run HELLO.COM
+A>BASIC             Start the BASIC interpreter
+A>TYPE FILE.TXT     Display a file
+A>ERA *.BAK         Delete files
+A>REN NEW=OLD       Rename a file
+A>B:                Switch to drive B
 ```
 
-**MBASIC commands:**
+### Writing and running a program
+
 ```
-10 PRINT "HELLO, WORLD!"
-20 GOTO 10
-RUN
-LIST
-SAVE "PROG.BAS"
-LOAD "PROG.BAS"
-SYSTEM           - Return to CP/M
+A>EDIT HELLO.ASM
+```
+*Type your assembly program, Ctrl+S to save, Ctrl+Q to quit*
+
+```
+A>ASM HELLO
+Assembling HELLO.ASM...
+HELLO.ASM: 0 error(s)
+Written HELLO.COM (17 bytes)
+
+A>HELLO
+Hello, World!
+A>
 ```
 
-## Debug Panel
+## Documentation
 
-The right-side panel provides:
-- **Control**: Run/Pause/Step/Reset, CPU speed (0.1–10 MHz)
-- **Registers**: A, BC, DE, HL, SP, PC, flags (S, Z, AC, P, CY)
-- **Memory**: Hex dump with address navigation (auto-follows PC)
-- **Disks**: Mount/unmount `.dsk` files, download drive images
+| Guide | Contents |
+|-------|----------|
+| [docs/TERMINAL.md](docs/TERMINAL.md) | CP/M commands, drives, memory map, keyboard shortcuts |
+| [docs/EDITOR.md](docs/EDITOR.md) | EDIT screen editor — keys, navigation, search |
+| [docs/ASSEMBLER.md](docs/ASSEMBLER.md) | ASM assembler — all mnemonics, directives, BDOS interface |
+| [docs/BASIC.md](docs/BASIC.md) | BASIC interpreter — statements, functions, examples |
 
 ## Running Tests
 
 ```bash
-dotnet test tests/Emulator.Tests
+dotnet test tests/Emulator.Tests/      # 36 CPU opcode unit tests
+dotnet test tests/Integration.Tests/  # 2 headless boot integration tests
 ```
 
-Tests cover all 8080 opcodes, flag computation, and CP/M BIOS functions.
+All 38 tests pass with no external files required.
+
+## Disk Images
+
+Drive A starts with a blank formatted disk. You can:
+
+- **Upload** a `.dsk` file via the Disk panel in the browser to mount it on any drive (A–D)
+- **Download** the current disk image to save your work
+- **Build** a populated disk image from `.COM` files in `roms/`:
+
+```bash
+dotnet run --project tools/MkDisk
+```
+
+This creates `disks/cpm22_system.dsk`. Place any standard CP/M `.COM` files in `roms/` before running MkDisk.
+
+Standard disk format: 77 tracks × 26 sectors × 128 bytes = **256,256 bytes**.
+
+## Debug Panel
+
+The right-side panel provides:
+
+- **Control**: Run / Pause / Step / Reset / Hard Reset, CPU speed slider
+- **Registers**: A, BC, DE, HL, SP, PC, and all flags live while running
+- **Memory**: Hex dump with address navigation (auto-follows PC)
+- **Disks**: Upload/download `.dsk` files, see disk activity indicators
 
 ## Project Structure
 
 ```
 i8080_Sonnet46/
 ├── src/
-│   ├── Emulator/          # CPU, Memory, BIOS, Disk (class library)
-│   ├── Server/            # ASP.NET Core + SignalR
-│   └── Frontend/          # React + xterm.js
+│   ├── Emulator/          # CPU, memory, BIOS, BDOS, CCP, programs (library)
+│   │   ├── CPU/           # I8080.cs, Instructions.cs, Flags.cs
+│   │   ├── Memory/        # MemoryBus.cs, MemoryMap.cs
+│   │   ├── Bios/          # BiosHandler.cs, TerminalInputQueue.cs
+│   │   ├── Cpm/           # CpmSystem.cs, BdosHandler.cs, CcpHandler.cs, CpmDisk.cs
+│   │   ├── Disk/          # DiskSystem.cs, DiskImage.cs
+│   │   ├── IO/            # IoPort.cs
+│   │   └── Programs/      # TextEditor.cs, Assembler8080.cs, BasicInterpreter.cs
+│   ├── Server/            # ASP.NET Core + SignalR hub + EmulatorService
+│   └── Frontend/          # React + xterm.js terminal UI
 ├── tests/
-│   ├── Emulator.Tests/    # CPU opcode unit tests
-│   └── Integration.Tests/ # Full boot integration tests
+│   ├── Emulator.Tests/    # CPU opcode unit tests (no ROM required)
+│   └── Integration.Tests/ # Headless boot tests (pure .NET, no ROM required)
 ├── tools/
-│   └── MkDisk/            # Disk image builder
-├── roms/                  # cpm22.sys + *.COM files (not in git)
-└── disks/                 # Generated .dsk files
+│   └── MkDisk/            # Builds cpm22_system.dsk from roms/*.COM
+├── docs/
+│   ├── TERMINAL.md        # CP/M terminal user guide
+│   ├── EDITOR.md          # EDIT screen editor guide
+│   ├── ASSEMBLER.md       # ASM assembler reference
+│   └── BASIC.md           # BASIC interpreter reference
+├── disks/                 # Generated .dsk files (git-ignored)
+└── roms/                  # Optional .COM files for disk population (git-ignored)
 ```
 
 ## Technical Notes
 
 ### BIOS Trap Mechanism
 
-Instead of emulating actual disk hardware, the BIOS is implemented via OUT-instruction traps:
-- At each BIOS jump table entry (0xFA00+), the code is `OUT nn, A; RET`
-- The .NET I/O handler intercepts port `nn` (0-16) and executes the BIOS function
-- CPU registers are modified as needed, then `RET` returns to the caller
+BIOS functions are implemented via `OUT`-instruction traps:
+- **BIOS jump table** at `0xFA00`: 17 × `JMP stubN` entries
+- **BIOS stubs** at `0xFA33`: 17 × `OUT fnIndex, A` + `RET`
+- `IoPort.Out()` intercepts ports 0–16 and calls `BiosHandler.Execute(BiosFunction, cpu)`
 
-### CP/M Memory Map (64KB)
+### BDOS Trap
+
+Instead of a JMP to a binary BDOS, address `0x0005` contains `OUT 17, A` + `RET`. When a program does `CALL 5`, `IoPort.Out()` intercepts port 17 and calls `BdosHandler.Execute(cpu)`, which dispatches on `cpu.C` (the function number).
+
+### CCP Threading Model
+
+The CCP runs on the CPU thread. `BiosHandler.Boot()` calls `CcpHandler.Run()`, which blocks on `TerminalInputQueue.BlockingRead()` while waiting for user input. When the user runs a `.COM` file, `CcpHandler` sets `cpu.PC = 0x0100` and returns. The CPU executor then resumes from the loaded program.
+
+### CP/M Memory Map
 
 ```
-0x0000-0x00FF  Zero page (JMP WBOOT at 0x0000, JMP BDOS at 0x0005)
-0x0100-0xCFFF  TPA (Transient Program Area) - programs load here
-0xE400-0xEBFF  CCP (Console Command Processor)
-0xEC00-0xF9FF  BDOS (Basic Disk Operating System)
-0xFA00-0xFFFF  BIOS (jump table + stubs + DPH/DPB structures)
+0x0000–0x00FF   Zero page (WBOOT vector, BDOS trap, drive number)
+0x0100–0xCFFF   TPA — programs load here
+0xE400–0xEBFF   CCP area
+0xEC00–0xF9FF   BDOS area
+0xFA00–0xFFFF   BIOS jump table, stubs, and DPH/DPB structures
 ```
-
-### Disk Format
-
-Standard 8" single-density: 77 tracks × 26 sectors × 128 bytes = **256,256 bytes**

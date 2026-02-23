@@ -34,7 +34,7 @@ public sealed class EmulatorService : IHostedService, IDisposable
 
     public EmulatorService(IHubContext<EmulatorHub> hub, ILogger<EmulatorService> logger)
     {
-        _hub = hub;
+        _hub    = hub;
         _logger = logger;
     }
 
@@ -56,15 +56,18 @@ public sealed class EmulatorService : IHostedService, IDisposable
 
     // ── Initialization ────────────────────────────────────────────────────────
 
-    public void LoadCpm(byte[] cpmBinary, byte[]? diskAImage = null)
+    /// <summary>
+    /// Start the emulator. No external binary required — CCP, BDOS, and all programs
+    /// are implemented in .NET. Optionally provide a disk image for drive A.
+    /// </summary>
+    public void StartEmulator(byte[]? diskAImage = null)
     {
         _cts.Cancel();
         _cts = new CancellationTokenSource();
 
         var input = new TerminalInputQueue();
-        _system = new CpmSystem(cpmBinary, input, WriteOutput);
+        _system = new CpmSystem(input, WriteOutput);
         _system.DiskActivity += OnDiskActivity;
-
         _system.Initialize();
 
         if (diskAImage != null)
@@ -72,12 +75,18 @@ public sealed class EmulatorService : IHostedService, IDisposable
             var diskA = DiskImage.LoadFromBytes("A.DSK", diskAImage);
             _system.MountDisk(0, diskA);
         }
+        else
+        {
+            // Create an empty formatted disk on drive A so the CCP has a writable disk
+            var blankDisk = DiskImage.CreateBlank("A.DSK");
+            _system.MountDisk(0, blankDisk);
+        }
 
         _paused = false;
-        _cpuTask = Task.Run(() => CpuLoop(_cts.Token));
+        _cpuTask   = Task.Run(() => CpuLoop(_cts.Token));
         _stateTask = Task.Run(() => StateLoop(_cts.Token));
 
-        _logger.LogInformation("CP/M system initialized, CPU running.");
+        _logger.LogInformation("CP/M system initialized (pure .NET), CPU running.");
     }
 
     // ── CPU loop ─────────────────────────────────────────────────────────────
@@ -85,6 +94,9 @@ public sealed class EmulatorService : IHostedService, IDisposable
     private async Task CpuLoop(CancellationToken ct)
     {
         if (_system == null) return;
+
+        // Propagate the run token to the BIOS so blocking CONIN/CCP calls can be cancelled
+        _system.SetRunToken(ct);
 
         const int BATCH = 10_000;
         var sw = Stopwatch.StartNew();
@@ -101,27 +113,23 @@ public sealed class EmulatorService : IHostedService, IDisposable
             int ran = 0;
             if (_stepping)
             {
-                // Single-step mode: execute exactly one instruction
                 ran = _system.Cpu.ExecuteOne();
                 _stepping = false;
-                _paused = true;
+                _paused   = true;
                 await BroadcastStateAsync().ConfigureAwait(false);
             }
             else
             {
-                // Normal run mode: execute a batch then throttle
                 while (ran < BATCH && !ct.IsCancellationRequested && !_paused)
-                {
                     ran += _system.Cpu.ExecuteOne();
-                }
             }
 
             if (ran > 0 && !_stepping)
             {
                 nextTarget += ran;
                 long expectedMs = (nextTarget * 1000L) / _speedHz;
-                long actualMs = sw.ElapsedMilliseconds;
-                long sleepMs = expectedMs - actualMs;
+                long actualMs   = sw.ElapsedMilliseconds;
+                long sleepMs    = expectedMs - actualMs;
                 if (sleepMs > 1)
                     await Task.Delay((int)sleepMs, ct).ConfigureAwait(false);
             }
@@ -135,8 +143,7 @@ public sealed class EmulatorService : IHostedService, IDisposable
         while (!ct.IsCancellationRequested)
         {
             await Task.Delay(100, ct).ConfigureAwait(false);
-            if (!_paused)
-                await BroadcastStateAsync().ConfigureAwait(false);
+            if (!_paused) await BroadcastStateAsync().ConfigureAwait(false);
         }
     }
 
@@ -160,7 +167,7 @@ public sealed class EmulatorService : IHostedService, IDisposable
 
     private async Task FlushOutputAsync()
     {
-        await Task.Delay(8).ConfigureAwait(false); // ~120 fps batch
+        await Task.Delay(8).ConfigureAwait(false);
         string text;
         lock (_outputLock)
         {
@@ -174,10 +181,7 @@ public sealed class EmulatorService : IHostedService, IDisposable
 
     // ── Control methods (called from Hub) ────────────────────────────────────
 
-    public void EnqueueInput(byte[] bytes)
-    {
-        _system?.Input.Enqueue(bytes);
-    }
+    public void EnqueueInput(byte[] bytes) => _system?.Input.Enqueue(bytes);
 
     public async Task PauseAsync()
     {
@@ -193,24 +197,24 @@ public sealed class EmulatorService : IHostedService, IDisposable
 
     public async Task StepAsync()
     {
-        _paused = true;
+        _paused   = true;
         _stepping = true;
-        // Step executes in CpuLoop; state is broadcast there
-        await Task.Delay(20).ConfigureAwait(false); // give CPU thread time to step
+        await Task.Delay(20).ConfigureAwait(false);
     }
 
     public async Task ResetAsync()
     {
-        // Warm boot: cancel CONIN block, reload CCP
+        // Warm boot: cancel current CONIN block, restart CCP
         _cts.Cancel();
         _cts = new CancellationTokenSource();
         _system?.Input.Clear();
 
         if (_system != null)
         {
+            _system.SetRunToken(_cts.Token);
             _system.Cpu.PC = (ushort)(MemoryMap.BIOS_BASE + 3); // WBOOT
-            _paused = false;
-            _cpuTask = Task.Run(() => CpuLoop(_cts.Token));
+            _paused   = false;
+            _cpuTask   = Task.Run(() => CpuLoop(_cts.Token));
             _stateTask = Task.Run(() => StateLoop(_cts.Token));
         }
 
@@ -225,9 +229,10 @@ public sealed class EmulatorService : IHostedService, IDisposable
 
         if (_system != null)
         {
-            _system.Initialize(); // re-initializes memory and CPU
-            _paused = false;
-            _cpuTask = Task.Run(() => CpuLoop(_cts.Token));
+            _system.Initialize();
+            _system.SetRunToken(_cts.Token);
+            _paused   = false;
+            _cpuTask   = Task.Run(() => CpuLoop(_cts.Token));
             _stateTask = Task.Run(() => StateLoop(_cts.Token));
         }
 
@@ -244,7 +249,7 @@ public sealed class EmulatorService : IHostedService, IDisposable
     {
         if (_system == null) return Array.Empty<byte>();
         address = Math.Clamp(address, 0, 0xFFFF);
-        length = Math.Clamp(length, 1, Math.Min(1024, 0x10000 - address));
+        length  = Math.Clamp(length, 1, Math.Min(1024, 0x10000 - address));
         return _system.Memory.Dump(address, length);
     }
 
@@ -259,15 +264,17 @@ public sealed class EmulatorService : IHostedService, IDisposable
 
     public Task<byte[]> DownloadDiskAsync(int drive)
     {
+        // Flush dirty files before download
+        _system?.FlushDrive(drive);
         var disk = _system?.Disks.GetDisk(drive);
         return Task.FromResult(disk?.ToArray() ?? Array.Empty<byte>());
     }
 
     public string[] ListDiskFiles(int drive)
     {
-        var disk = _system?.Disks.GetDisk(drive);
-        if (disk == null) return Array.Empty<string>();
-        return CpmFileSystem.ListFiles(disk).ToArray();
+        var cpmDisk = _system?.GetCpmDisk(drive);
+        if (cpmDisk == null) return Array.Empty<string>();
+        return cpmDisk.GetFileList().ToArray();
     }
 
     public CpuStateDto? GetCpuState() => _system?.GetCpuState(!_paused, _speedHz);

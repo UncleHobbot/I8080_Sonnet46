@@ -6,31 +6,24 @@ using Emulator.Disk;
 namespace Integration.Tests;
 
 /// <summary>
-/// Headless CP/M boot test: loads real cpm22.sys + disk image and verifies
+/// Headless CP/M boot test: boots the pure-.NET CP/M implementation and verifies
 /// the system reaches the "A>" prompt within a time limit.
+/// No external ROM binary required.
 /// </summary>
 public class CpmBootTests
 {
-    // Locate roms/disks relative to this test project
-    private static string RepoRoot()
+    // Locate disks/ relative to this test project
+    private static string? FindRepoRoot()
     {
-        // Walk up from test output dir to find the repo root (contains roms/)
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "roms")))
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "disks")))
             dir = dir.Parent;
-        return dir?.FullName ?? throw new InvalidOperationException("Could not find repo root with roms/ dir");
+        return dir?.FullName;
     }
 
     [Fact(Timeout = 10_000)] // 10 second timeout
     public async Task CpmBoots_Produces_Prompt()
     {
-        var root = RepoRoot();
-        var cpmBinPath = Path.Combine(root, "roms", "cpm22.sys");
-        var diskAPath  = Path.Combine(root, "disks", "cpm22_system.dsk");
-
-        Skip.If(!File.Exists(cpmBinPath), "cpm22.sys not found - skipping (requires ROM files)");
-        Skip.If(!File.Exists(diskAPath),  "cpm22_system.dsk not found - run MkDisk first");
-
         var output = new StringBuilder();
         var promptSeen = new TaskCompletionSource<bool>();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(9));
@@ -43,12 +36,15 @@ public class CpmBootTests
         }
 
         var input = new TerminalInputQueue();
-        var system = new CpmSystem(File.ReadAllBytes(cpmBinPath), input, OnOutput);
+        var system = new CpmSystem(input, OnOutput);
         system.Initialize();
-        system.MountDisk(0, DiskImage.LoadFromFile(diskAPath));
+
+        // Mount blank disk on A so CCP has somewhere to work
+        system.MountDisk(0, DiskImage.CreateBlank("A.DSK"));
 
         // Run CPU on background thread
         cts.Token.Register(() => promptSeen.TrySetCanceled());
+        system.SetRunToken(cts.Token);
         var cpuTask = Task.Run(() =>
         {
             while (!cts.IsCancellationRequested && !promptSeen.Task.IsCompleted)
@@ -58,7 +54,7 @@ public class CpmBootTests
             }
         }, cts.Token);
 
-        var reached = await promptSeen.Task.ConfigureAwait(false);
+        var reached = await promptSeen.Task;
         cts.Cancel();
 
         Assert.True(reached, $"CP/M did not produce 'A>' prompt. Output was:\n{output}");
@@ -67,21 +63,16 @@ public class CpmBootTests
     [Fact(Timeout = 20_000)]
     public async Task Dir_Command_Lists_Files()
     {
-        var root = RepoRoot();
-        var cpmBinPath = Path.Combine(root, "roms", "cpm22.sys");
-        var diskAPath  = Path.Combine(root, "disks", "cpm22_system.dsk");
-
-        Skip.If(!File.Exists(cpmBinPath) || !File.Exists(diskAPath), "ROM/disk files not found");
+        var root = FindRepoRoot();
+        var diskAPath = root != null ? Path.Combine(root, "disks", "cpm22_system.dsk") : null;
 
         var output = new StringBuilder();
         var secondPrompt = new TaskCompletionSource<bool>();
-        int promptCount = 0;
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(18));
 
         void OnOutput(string text)
         {
             output.Append(text);
-            // Wait for A> after the DIR output (second prompt)
             var str = output.ToString();
             var count = str.Split("A>").Length - 1;
             if (count >= 2)
@@ -89,11 +80,17 @@ public class CpmBootTests
         }
 
         var input = new TerminalInputQueue();
-        var system = new CpmSystem(File.ReadAllBytes(cpmBinPath), input, OnOutput);
+        var system = new CpmSystem(input, OnOutput);
         system.Initialize();
-        system.MountDisk(0, DiskImage.LoadFromFile(diskAPath));
+
+        // Load disk image if present, otherwise use blank disk
+        if (diskAPath != null && File.Exists(diskAPath))
+            system.MountDisk(0, DiskImage.LoadFromFile(diskAPath));
+        else
+            system.MountDisk(0, DiskImage.CreateBlank("A.DSK"));
 
         cts.Token.Register(() => secondPrompt.TrySetCanceled());
+        system.SetRunToken(cts.Token);
 
         // Run CPU
         _ = Task.Run(() =>
@@ -106,21 +103,19 @@ public class CpmBootTests
         }, cts.Token);
 
         // Wait for first A> then send DIR
-        var firstPrompt = new CancellationTokenSource(9_000);
-        while (!output.ToString().Contains("A>") && !firstPrompt.IsCancellationRequested)
-            await Task.Delay(50).ConfigureAwait(false);
+        var deadline = DateTime.UtcNow.AddSeconds(9);
+        while (!output.ToString().Contains("A>") && DateTime.UtcNow < deadline)
+            await Task.Delay(50);
 
         if (!output.ToString().Contains("A>"))
             throw new Exception("Never reached first A> prompt");
 
         // Send "DIR\r" command
-        foreach (char c in "DIR\r")
-            input.Enqueue((byte)c);
+        input.Enqueue(new byte[] { (byte)'D', (byte)'I', (byte)'R', (byte)'\r' });
 
-        var reached = await secondPrompt.Task.ConfigureAwait(false);
+        var reached = await secondPrompt.Task;
         cts.Cancel();
 
         Assert.True(reached, $"DIR command did not complete. Output:\n{output}");
-        Assert.Contains("COM", output.ToString()); // at least one .COM file listed
     }
 }
